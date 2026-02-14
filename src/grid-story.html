@@ -116,9 +116,17 @@ body{font-family:var(--font);color:var(--c-gray-700);background:var(--c-gray-50)
 .footer-attr.visible{display:block;}
 @media(max-width:1024px){
   .story-container.visible{display:block;}
-  .viz-sticky{width:100%;height:50vh;}
-  .narrative-column{width:100%;}
-  .story-step{min-height:auto;padding:48px 24px;}
+  .viz-sticky{display:none;}
+  .narrative-column{width:100%;padding:0 0 32px;}
+  .story-step{min-height:auto;padding:24px 20px 32px;}
+  .story-step .step-inner{opacity:1;transform:none;transition:none;max-width:100%;}
+  .mobile-act-panel{margin:0 12px 28px;background:var(--c-white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden;}
+  .mobile-act-panel .viz-panel{position:relative;inset:auto;opacity:1;transform:none;pointer-events:auto;transition:none;width:100%;height:320px;padding:0;background:var(--c-gray-50);border-bottom:1px solid var(--glass-border);}
+  .mobile-act-panel .viz-panel canvas{width:100%;height:100%;}
+  .mobile-act-panel .viz-controls{top:12px;padding:6px 14px;}
+  .mobile-act-panel .viz-controls input[type=range]{width:120px;}
+  .mobile-act-panel .story-step{padding:20px 20px 24px;}
+  .mobile-act-panel .step-inner h2{font-size:1.4rem;}
 }
 @media(max-width:900px){
   .header-logo{height:28px;top:14px;left:16px;}
@@ -298,8 +306,12 @@ function buildStory(rk){
   </div></div>`;
 
   narr.innerHTML=html;
-  setupScrollObserver();
-  setTimeout(()=>goToStep(1),300);
+  if(isMobile()){
+    setupMobileLayout(rk);
+  } else {
+    setupScrollObserver();
+    setTimeout(()=>goToStep(1),300);
+  }
 }
 
 // ═══════════════════════ VISUALIZATIONS ═══════════════════════
@@ -536,23 +548,58 @@ function setupScrollObserver(){
   steps.forEach(s=>obs.observe(s));
 }
 
+function isMobile(){ return window.innerWidth<=1024; }
+
+function getVizPanelMap(rk){
+  const rd=DATA.annual[rk],years=Object.keys(rd).sort();
+  const hasCoal=(rd[years[0]].coal_gwh||0)>10||(rd[years[years.length-1]].coal_gwh||0)>10;
+  return hasCoal?[2,3,4,5,6,7]:[2,3,5,6,7];
+}
+
+function setupMobileLayout(rk){
+  if(!isMobile())return;
+  const vizSticky=document.getElementById('vizSticky');
+  const narr=document.getElementById('narrativeColumn');
+  const steps=Array.from(narr.querySelectorAll('.story-step'));
+  const panelMap=getVizPanelMap(rk);
+
+  // Move all panels back to vizSticky first (cleanup from previous region)
+  [2,3,4,5,6,7].forEach(n=>{
+    const p=document.getElementById('vizPanel'+n);
+    if(p&&!vizSticky.contains(p))vizSticky.appendChild(p);
+  });
+
+  narr.innerHTML='';
+  steps.forEach((step,i)=>{
+    const panelNum=panelMap[i];
+    const panel=document.getElementById('vizPanel'+panelNum);
+    const wrap=document.createElement('div');
+    wrap.className='mobile-act-panel';
+    if(panel){
+      panel.classList.add('active');
+      wrap.appendChild(panel);
+    }
+    step.classList.add('active');
+    wrap.appendChild(step);
+    narr.appendChild(wrap);
+  });
+
+  // Draw all visualizations after layout settles
+  Object.values(animFrames).forEach(id=>cancelAnimationFrame(id));animFrames={};
+  requestAnimationFrame(()=>{
+    panelMap.forEach(v=>{
+      switch(v){case 2:viz2(rk);break;case 3:viz3(rk);break;case 4:viz4(rk);break;case 5:viz5(rk);break;case 6:viz6(rk);break;case 7:viz7(rk);break;}
+    });
+  });
+}
+
 function goToStep(step){
+  if(isMobile())return;
   if(step===currentStep||!selectedRegion)return;currentStep=step;
   document.querySelectorAll('.viz-panel').forEach(p=>p.classList.remove('active'));
   Object.values(animFrames).forEach(id=>cancelAnimationFrame(id));animFrames={};
-  const rd=DATA.annual[selectedRegion],years=Object.keys(rd).sort();
-  const hasCoal=(rd[years[0]].coal_gwh||0)>10||(rd[years[years.length-1]].coal_gwh||0)>10;
-  // Map narrative step to viz panel (panels are 2-7, no panel 1 anymore)
-  // Step 1=donut(panel2), Step 2=demand(panel3), Step 3=coal(panel4) or renewables(panel5), etc.
-  const baseMap=[2,3,4,5,6,7]; // step 1->panel2, step 2->panel3, etc.
-  let vizNum;
-  if(hasCoal){
-    vizNum=baseMap[step-1]||7;
-  } else {
-    // Skip coal (panel 4): steps 1->2, 2->3, 3->5, 4->6, 5->7
-    const noCoalMap=[2,3,5,6,7];
-    vizNum=noCoalMap[step-1]||7;
-  }
+  const panelMap=getVizPanelMap(selectedRegion);
+  const vizNum=panelMap[step-1]||7;
   const panel=document.getElementById('vizPanel'+vizNum);
   if(panel)panel.classList.add('active');
   const rk=selectedRegion;
