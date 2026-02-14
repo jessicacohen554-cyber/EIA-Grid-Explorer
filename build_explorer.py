@@ -119,7 +119,7 @@ print(f"  Historic viz code: {len(gs_viz_code)} chars")
 #     (we use our shared/custom versions of these)
 
 # Functions to skip entirely (we provide our own implementations)
-SKIP_FUNCS = ["buildMap()", "selectRegion(", "buildStory(", "setupObs()", "goToStep("]
+SKIP_FUNCS = ["buildMap()", "selectRegion(", "buildStory(", "setupObs()", "goToStep(", "isMobile()", "setupMobileLayout()"]
 
 gv_viz_lines = []
 capture = False
@@ -338,9 +338,20 @@ body{{font-family:var(--font);color:var(--c-gray-700);background:var(--c-gray-50
 
 @media(max-width:1024px){{
   .story-container.visible{{display:block;}}
-  .viz-sticky{{width:100%;height:50vh;}}
-  .narrative-column{{width:100%;}}
-  .story-step{{min-height:auto;padding:48px 24px;}}
+  .viz-sticky{{display:none;}}
+  .narrative-column{{width:100%;padding:0 0 32px;}}
+  .story-step{{min-height:auto;padding:24px 20px 32px;}}
+  .story-step .step-inner{{opacity:1;transform:none;transition:none;max-width:100%;}}
+  .mobile-act-panel{{margin:0 12px 28px;background:var(--c-white);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden;}}
+  .mobile-act-panel .viz-panel{{position:relative;inset:auto;opacity:1;transform:none;pointer-events:auto;transition:none;width:100%;min-height:340px;padding:20px 16px 12px;background:var(--c-gray-50);border-bottom:1px solid var(--glass-border);}}
+  .mobile-act-panel .viz-panel canvas{{width:100%;height:260px;display:block;}}
+  .mobile-act-panel .viz-panel .viz-label{{margin-bottom:10px;font-size:0.76rem;}}
+  .mobile-act-panel .viz-panel .viz-sublabel{{margin-top:10px;max-width:100%;font-size:0.72rem;}}
+  .mobile-act-panel .viz-panel #act7-chart{{height:300px !important;}}
+  .mobile-act-panel .viz-controls{{top:12px;padding:6px 14px;}}
+  .mobile-act-panel .viz-controls input[type=range]{{width:120px;}}
+  .mobile-act-panel .story-step{{padding:20px 20px 24px;}}
+  .mobile-act-panel .step-inner h2{{font-size:1.4rem;}}
 }}
 @media(max-width:768px){{
   .header{{padding:40px 16px 36px;}}
@@ -359,7 +370,6 @@ body{{font-family:var(--font);color:var(--c-gray-700);background:var(--c-gray-50
   .mode-toggle-section{{padding:0 12px;margin-top:16px;}}
   .mode-toggle{{flex-direction:column;gap:4px;border-radius:var(--radius-md);}}
   .mode-btn{{padding:10px 20px;font-size:0.82rem;border-radius:var(--radius-md);}}
-  .viz-sticky{{height:45vh;}}
   .viz-controls{{padding:6px 12px;gap:8px;}}
   .viz-controls input[type=range]{{width:120px;}}
   .viz-controls .yr-label{{font-size:13px;min-width:36px;}}
@@ -383,7 +393,9 @@ body{{font-family:var(--font);color:var(--c-gray-700);background:var(--c-gray-50
   .header .subtitle{{font-size:0.8rem;line-height:1.45;}}
   #map-container{{grid-template-columns:repeat(auto-fill,minmax(75px,1fr));gap:6px;}}
   .region-tile svg{{height:36px;}}
-  .viz-sticky{{height:38vh;}}
+  .mobile-act-panel{{margin:0 8px 20px;}}
+  .mobile-act-panel .viz-panel{{min-height:280px;padding:14px 10px 8px;}}
+  .mobile-act-panel .viz-panel canvas{{height:220px;}}
   .story-step{{padding:32px 16px;}}
   .step-inner h2{{font-size:1.15rem;}}
   .step-inner p{{font-size:0.85rem;line-height:1.6;}}
@@ -671,6 +683,50 @@ const totalGen = yr => FUELS.reduce((s,f)=>s+gv(yr,f),0);
 const cleanPct = yr => {{ const t=totalGen(yr); return t>0?CLEAN.reduce((s,f)=>s+gv(yr,f),0)/t*100:0; }};
 
 let gsScrollObserver = null;
+function isMobile() {{ return window.innerWidth <= 1024; }}
+
+function gsGetPanelMap(rk) {{
+  const rd = GS_DATA.annual[rk], years = Object.keys(rd).sort();
+  const hasCoal = (rd[years[0]].coal_gwh||0)>10 || (rd[years[years.length-1]].coal_gwh||0)>10;
+  return hasCoal ? [2,3,4,5,6,7] : [2,3,5,6,7];
+}}
+
+function gsSetupMobileLayout(rk) {{
+  if (!isMobile()) return;
+  const vizSticky = document.getElementById('vizStickyH');
+  const narr = document.getElementById('narrativeColumnH');
+  const steps = Array.from(narr.querySelectorAll('.gs-step'));
+  const panelMap = gsGetPanelMap(rk);
+
+  // Move all panels back to vizSticky first (cleanup from previous region)
+  [2,3,4,5,6,7].forEach(n => {{
+    const p = document.getElementById('vizPanel'+n);
+    if (p && !vizSticky.contains(p)) vizSticky.appendChild(p);
+  }});
+
+  narr.innerHTML = '';
+  steps.forEach((step, i) => {{
+    const panelNum = panelMap[i];
+    const panel = document.getElementById('vizPanel'+panelNum);
+    const wrap = document.createElement('div');
+    wrap.className = 'mobile-act-panel';
+    if (panel) {{
+      panel.classList.add('active');
+      wrap.appendChild(panel);
+    }}
+    step.classList.add('active');
+    wrap.appendChild(step);
+    narr.appendChild(wrap);
+  }});
+
+  // Draw all visualizations after layout settles
+  Object.values(gsAnimFrames).forEach(id => cancelAnimationFrame(id)); gsAnimFrames = {{}};
+  requestAnimationFrame(() => {{
+    panelMap.forEach(v => {{
+      switch(v) {{ case 2:gsViz2(rk);break; case 3:gsViz3(rk);break; case 4:gsViz4(rk);break; case 5:gsViz5(rk);break; case 6:gsViz6(rk);break; case 7:gsViz7(rk);break; }}
+    }});
+  }});
+}}
 
 function gsSetupCanvas(id) {{
   const c = document.getElementById(id); if (!c) return null;
@@ -759,8 +815,12 @@ function gsInit(rk) {{
   </div></div>`;
 
   narr.innerHTML = html;
-  gsSetupScrollObserver();
-  setTimeout(() => gsGoToStep(1), 300);
+  if (isMobile()) {{
+    gsSetupMobileLayout(rk);
+  }} else {{
+    gsSetupScrollObserver();
+    setTimeout(() => gsGoToStep(1), 300);
+  }}
 }}
 
 function gsSliderStep(id,dir) {{ const sl=document.getElementById(id); const v=Math.max(+sl.min,Math.min(+sl.max,+sl.value+dir)); sl.value=v; sl.dispatchEvent(new Event('input')); }}
@@ -824,6 +884,7 @@ function gsSetupScrollObserver() {{
 }}
 
 function gsGoToStep(step) {{
+  if (isMobile()) return;
   if (step === gsCurrentStep || !selectedRegion) return; gsCurrentStep = step;
   document.querySelectorAll('#historicContainer .viz-panel').forEach(p => p.classList.remove('active'));
   Object.values(gsAnimFrames).forEach(id => cancelAnimationFrame(id)); gsAnimFrames = {{}};
@@ -882,6 +943,28 @@ html += gv_viz_code
 # Now add the buildStory, setupObs, goToStep functions that reference
 # the hourly-specific DOM elements
 html += """
+  var hvMobileSetup = false;
+  function hvSetupMobileLayout() {
+    if (!isMobile()) return;
+    if (hvMobileSetup) return;
+    hvMobileSetup = true;
+    const narr = document.getElementById('narrativeColumnHr');
+    const steps = Array.from(narr.querySelectorAll('.hv-step'));
+    narr.innerHTML = '';
+    for (var i = 1; i <= 7; i++) {
+      var panel = document.getElementById('hvPanel' + i);
+      var step = steps[i - 1];
+      if (!panel || !step) continue;
+      var wrap = document.createElement('div');
+      wrap.className = 'mobile-act-panel';
+      panel.classList.add('active');
+      wrap.appendChild(panel);
+      step.classList.add('active');
+      wrap.appendChild(step);
+      narr.appendChild(wrap);
+    }
+  }
+
   function buildStory(k) {
     const D = RDATA[k], S = D.stats;
     document.getElementById('statTWh').textContent = S.totalTWh;
@@ -896,12 +979,18 @@ html += """
     Object.values(animFrames).forEach(id => cancelAnimationFrame(id));
     animFrames = {};
 
-    drawAct1(k); drawAct2(k); drawAct3(k); drawAct4(k); drawAct5(k); drawAct6(k); buildSankey(k);
-
-    curStep = 0;
-    document.querySelectorAll('.hv-step').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('#hourlyContainer .viz-panel').forEach(p => p.classList.remove('active'));
-    setupObs();
+    if (isMobile()) {
+      hvSetupMobileLayout();
+      requestAnimationFrame(function() {
+        drawAct1(k); drawAct2(k); drawAct3(k); drawAct4(k); drawAct5(k); drawAct6(k); buildSankey(k);
+      });
+    } else {
+      drawAct1(k); drawAct2(k); drawAct3(k); drawAct4(k); drawAct5(k); drawAct6(k); buildSankey(k);
+      curStep = 0;
+      document.querySelectorAll('.hv-step').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('#hourlyContainer .viz-panel').forEach(p => p.classList.remove('active'));
+      setupObs();
+    }
   }
 
   function setupObs() {
@@ -917,6 +1006,7 @@ html += """
   }
 
   function goToStep(step) {
+    if (isMobile()) return;
     if (step === curStep) return;
     curStep = step;
     document.querySelectorAll('#hourlyContainer .viz-panel').forEach(p => p.classList.remove('active'));
