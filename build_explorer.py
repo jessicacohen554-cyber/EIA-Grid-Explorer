@@ -337,8 +337,8 @@ body{{font-family:var(--font);color:var(--c-gray-700);background:var(--c-gray-50
 .bottom-bar{{position:fixed;bottom:0;left:0;right:0;height:4px;z-index:1000;background:linear-gradient(90deg,#2372B9 0%,#2372B9 33%,#F47B27 33%,#F47B27 66%,#6BA543 66%,#6BA543 100%);}}
 
 @media(max-width:1024px){{
-  .story-container{{flex-direction:column;}}
-  .viz-sticky{{width:100%;height:50vh;position:relative;}}
+  .story-container.visible{{display:block;}}
+  .viz-sticky{{width:100%;height:50vh;}}
   .narrative-column{{width:100%;}}
   .story-step{{min-height:auto;padding:48px 24px;}}
 }}
